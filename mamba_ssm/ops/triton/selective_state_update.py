@@ -197,7 +197,7 @@ def selective_state_update(state, x, dt, A, B, C, D=None, z=None, dt_bias=None, 
                                       ((4, 4) if dstate <= 128 else
                                        ((4, 8))))))
     tie_hdim = A.stride(-1) == 0 and A.stride(-2) == 0 and dt.stride(-1) == 0 and dt_bias.stride(-1) == 0
-    with torch.cuda.device(x.device.index):
+    with torch.npu.device(x.device.index):
         _selective_scan_update_kernel[grid](
             state, x, dt, dt_bias, A, B, C, D, z, out, state_batch_indices,
             batch, nheads, dim, dstate, nheads // ngroups,

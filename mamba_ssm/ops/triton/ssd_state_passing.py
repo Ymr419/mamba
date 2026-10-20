@@ -17,12 +17,12 @@ from mamba_ssm.utils.determinism import autotune_configs
 
 @triton.autotune(
     configs=autotune_configs([
-        triton.Config({'BLOCK_SIZE': 64}),
-        triton.Config({'BLOCK_SIZE': 128}),
-        triton.Config({'BLOCK_SIZE': 256}),
-        triton.Config({'BLOCK_SIZE': 512}),
-        triton.Config({'BLOCK_SIZE': 1024}),
-        triton.Config({'BLOCK_SIZE': 2048}),
+        triton.Config({'BLOCK_SIZE': 64}, num_stages=1),
+        triton.Config({'BLOCK_SIZE': 128}, num_stages=1),
+        triton.Config({'BLOCK_SIZE': 256}, num_stages=1),
+        triton.Config({'BLOCK_SIZE': 512}, num_stages=1),
+        triton.Config({'BLOCK_SIZE': 1024}, num_stages=1),
+        triton.Config({'BLOCK_SIZE': 2048}, num_stages=1),
     ]),
     key=['dim'],
 )
@@ -89,12 +89,12 @@ def _state_passing_fwd_kernel(
 
 @triton.autotune(
     configs=autotune_configs([
-        triton.Config({'BLOCK_SIZE': 64}),
-        triton.Config({'BLOCK_SIZE': 128}),
-        triton.Config({'BLOCK_SIZE': 256}),
-        triton.Config({'BLOCK_SIZE': 512}),
-        triton.Config({'BLOCK_SIZE': 1024}),
-        triton.Config({'BLOCK_SIZE': 2048}),
+        triton.Config({'BLOCK_SIZE': 64}, num_stages=1),
+        triton.Config({'BLOCK_SIZE': 128}, num_stages=1),
+        triton.Config({'BLOCK_SIZE': 256}, num_stages=1),
+        triton.Config({'BLOCK_SIZE': 512}, num_stages=1),
+        triton.Config({'BLOCK_SIZE': 1024}, num_stages=1),
+        triton.Config({'BLOCK_SIZE': 2048}, num_stages=1),
     ]),
     key=['dim'],
 )
@@ -207,7 +207,7 @@ def _state_passing_fwd(states, dA_chunk_cumsum, initial_states=None, seq_idx=Non
     out = torch.empty((batch, nchunks, nheads, dim), device=states.device, dtype=out_dtype)
     final_states = torch.empty((batch, nheads, dim), device=states.device, dtype=torch.float32)
     grid = lambda META: (triton.cdiv(dim, META['BLOCK_SIZE']), batch, nheads)
-    with torch.cuda.device(states.device.index):
+    with torch.npu.device(states.device.index):
         _state_passing_fwd_kernel[grid](
             states, out, final_states, dA_chunk_cumsum, initial_states, seq_idx,
             dim, nchunks, seqlen if seq_idx is not None else 0, chunk_size if seq_idx is not None else 0,
@@ -255,7 +255,7 @@ def _state_passing_bwd(
     ddA_chunk_cumsum = torch.empty(batch, nheads, nchunks, n_blocks,
                                     dtype=torch.float32, device=dA_chunk_cumsum.device)
     grid = lambda META: (triton.cdiv(dim, META['BLOCK_SIZE']), batch, nheads)
-    with torch.cuda.device(dout.device.index):
+    with torch.npu.device(dout.device.index):
         _state_passing_bwd_kernel[grid](
             dout, states, dA_chunk_cumsum, dfinal_states, seq_idx,
             dstates, ddA_chunk_cumsum, dinitstates, states_converted,
