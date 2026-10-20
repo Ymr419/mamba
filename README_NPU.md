@@ -99,8 +99,18 @@ python3 -c "import torch, torch_npu, triton; print(torch.__version__, torch_npu.
 python3 -c "import torch, torch_npu; print('npu available:', torch.npu.is_available())"
 # expect: True
 python3 -c "import torch, torch_npu; p=torch.npu.get_device_properties(0); print(type(p).__name__, p.multi_processor_count)"
-# expect: _NPUDeviceProperties None   <-- this branch's code handles it (see PR)
+# expect on torch_npu 2.8.0.post1: _NPUDeviceProperties None   <-- this branch's code handles it (see PR)
+# expect on torch_npu 2.7.1.post11: _NPUDeviceProperties 40    (populated there; no special handling needed)
 ```
+
+> **torch_npu version note (verified 2026-10-20 on 910B3):** torch_npu
+> 2.8.0.post1 reports `multi_processor_count=None` (use
+> `vector_core_num` / `cube_core_num` instead — this branch does, with the
+> original `torch.cuda` line kept for non-NPU devices). torch_npu 2.7.1.post11
+> reports a real count (40 on 910B3), and the unmodified upstream sm_count
+> lines were re-verified to pass all backward tests there with bit-identical
+> gradients (rel-diff table row below). This branch's device-conditional code
+> works on both.
 
 ## 2. Get the code
 
@@ -246,7 +256,7 @@ Therefore:
 |---|---|
 | SSD forward process-level intermittent wrong results (triton-ascend pipelining race in `_state_passing_fwd/_bwd`) | **Fixed**: `num_stages=1` pinned for the state-passing autotune configs **on NPU only** (detected via `torch_npu`; GPU/ROCm configs unchanged, kernel bodies untouched). 16/16 multi-process PASS; backward gradients bit-identical; re-verified after the NPU-only refinement (8/8 bit-identical). Compiler-side fix pending in triton-ascend. |
 | SSD backward kernel compile errors (`_state_passing_bwd`, `_chunk_scan_bwd_ddAcs_stable`) on triton-ascend 3.2.2 | **Not fixable in this repo** — fixed upstream in triton-ascend 3.6.0. Use the nightly wheel for training. |
-| `multi_processor_count` is `None` on torch_npu | **Fixed, and proven necessary**: reverting the 5 sm_count sites to the upstream `torch.cuda` line crashes every affected backward wrapper on NPU (`AssertionError: Torch not compiled with CUDA enabled`, verified 2026-10-20). The shipped code dispatches on `device.type`: NPU falls back to `vector_core_num` / `cube_core_num`; the non-NPU branch is the original upstream line unchanged. |
+| `multi_processor_count` is `None` on torch_npu **2.8.0.post1** (2.7.1.post11 reports a real count, 40 on 910B3 — version-dependent) | **Fixed, and proven necessary on 2.8.0.post1**: reverting the 5 sm_count sites to the upstream `torch.cuda` line crashes every affected backward wrapper (`AssertionError: Torch not compiled with CUDA enabled`, verified 2026-10-20). The same reverted code was run on torch_npu 2.7.1.post11 + triton-ascend 3.6.0 and **passed all backward tests with bit-identical gradients** (x.grad 161.7418 / B.grad 326.0809 / C.grad 338.7113). The shipped code dispatches on `device.type`: NPU falls back to `vector_core_num` / `cube_core_num` (present in both torch_npu versions); the non-NPU branch is the original upstream line unchanged. |
 | Default `Mamba2` path needs CUDA-only `causal_conv1d` | Use `use_mem_eff_path=False` (documented above). |
 | `PYTHONPATH=<path>` (overwrite) breaks CANN GE graph compilation (`No module named 'tbe'`) | Always **append**: `PYTHONPATH=/work/mamba2-npu:$PYTHONPATH`. |
 | `import tilelang` rewrites `PYTHONPATH` and breaks CANN graph-compile subprocesses | Avoid importing the mamba3 stack on NPU; this branch's lazy `mamba_ssm/__init__` keeps `import mamba_ssm.modules.mamba2` free of tilelang. |
@@ -263,4 +273,4 @@ Therefore:
 | Python | 3.11.15 (container image) |
 | torch / torch_npu | 2.8.0+cpu / 2.8.0.post1 |
 | triton / triton-ascend | 3.2.0 / 3.2.2 (inference); 3.6.0+dev (training) |
-| torch_npu device props | `cube_core_num=20`, `vector_core_num=40`, `multi_processor_count=None` |
+| torch_npu device props (2.8.0.post1; on 2.7.1.post11 `multi_processor_count=40`) | `cube_core_num=20`, `vector_core_num=40`, `multi_processor_count=None` |
