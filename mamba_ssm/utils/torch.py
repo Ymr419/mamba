@@ -12,6 +12,14 @@ except ImportError:
 # attributes on Ascend devices are cube_core_num / vector_core_num.
 amp_device_type = "npu" if _npu_available else "cuda"
 
+def device_ctx(device):
+    """Backend-specific device context manager for accelerator kernel launches.
+
+    Returns torch.npu.device(...) on NPU devices, torch.cuda.device(...) on
+    everything else (identical to the original upstream behavior there).
+    """
+    return (torch.npu if device.type == "npu" else torch.cuda).device(device.index)
+
 def custom_amp_decorator(dec: Callable, cuda_amp_deprecated: bool):
     def decorator(*args, **kwargs):
         if cuda_amp_deprecated:
