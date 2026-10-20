@@ -24,7 +24,8 @@ installation with the bundled test suite (`tests/npu/`).
 
 The process-level intermittent wrong-result bug in the SSD forward
 (`_state_passing_fwd_kernel` pipelining race, ~25–46 % of processes) is **fixed
-in this branch** by pinning `num_stages=1`; see "Known issues" below.
+in this branch** by pinning `num_stages=1` when running on NPU (GPU configs are
+untouched); see "Known issues" below.
 
 ## 1. Environment setup
 
@@ -243,7 +244,7 @@ Therefore:
 
 | Issue | Status in this branch |
 |---|---|
-| SSD forward process-level intermittent wrong results (triton-ascend pipelining race in `_state_passing_fwd/_bwd`) | **Fixed**: `num_stages=1` pinned for the state-passing autotune configs (12 sites). 16/16 multi-process PASS; backward gradients bit-identical. Compiler-side fix pending in triton-ascend. |
+| SSD forward process-level intermittent wrong results (triton-ascend pipelining race in `_state_passing_fwd/_bwd`) | **Fixed**: `num_stages=1` pinned for the state-passing autotune configs **on NPU only** (detected via `torch_npu`; GPU/ROCm configs unchanged, kernel bodies untouched). 16/16 multi-process PASS; backward gradients bit-identical; re-verified after the NPU-only refinement (8/8 bit-identical). Compiler-side fix pending in triton-ascend. |
 | SSD backward kernel compile errors (`_state_passing_bwd`, `_chunk_scan_bwd_ddAcs_stable`) on triton-ascend 3.2.2 | **Not fixable in this repo** — fixed upstream in triton-ascend 3.6.0. Use the nightly wheel for training. |
 | `multi_processor_count` is `None` on torch_npu | **Fixed**: sm_count derived from `vector_core_num` / `cube_core_num`. |
 | Default `Mamba2` path needs CUDA-only `causal_conv1d` | Use `use_mem_eff_path=False` (documented above). |
