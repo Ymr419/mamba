@@ -657,9 +657,13 @@ def _layer_norm_bwd(
     BLOCK_N = min(MAX_FUSED_SIZE, triton.next_power_of_2(N))
     if N > BLOCK_N:
         raise RuntimeError("This layer norm doesn't support feature dim >= 64KB.")
-    # torch_npu exposes multi_processor_count as None; use the vector core count instead.
-    _props = torch.npu.get_device_properties(x.device)
-    sm_count = getattr(_props, "vector_core_num", None) or getattr(_props, "multi_processor_count", None) or 1
+    # torch_npu exposes multi_processor_count as None; fall back to the NPU
+    # core-count attributes. Non-NPU devices keep the original CUDA path.
+    if x.device.type == "npu":
+        _props = torch.npu.get_device_properties(x.device)
+        sm_count = getattr(_props, "vector_core_num", None) or getattr(_props, "multi_processor_count", None) or 1
+    else:
+        sm_count = torch.cuda.get_device_properties(x.device).multi_processor_count
     _dw = torch.empty((sm_count, N), dtype=torch.float32, device=weight.device)
     _db = (
         torch.empty((sm_count, N), dtype=torch.float32, device=bias.device)

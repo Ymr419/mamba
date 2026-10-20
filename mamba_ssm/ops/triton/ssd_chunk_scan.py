@@ -1482,9 +1482,13 @@ def _chunk_scan_bwd_dC(prev_states, dA_cumsum, dout, seq_idx=None, C=None, ngrou
         ddA_cumsum_prev_strides = (0, 0, 0, 0)
         stride_ddA_tile = 0
     nheads_ngroups_ratio = nheads // ngroups
-    # torch_npu exposes multi_processor_count as None; use the cube core count instead.
-    _props = torch.npu.get_device_properties(dout.device)
-    sm_count = getattr(_props, "cube_core_num", None) or getattr(_props, "multi_processor_count", None) or 1
+    # torch_npu exposes multi_processor_count as None; fall back to the NPU
+    # core-count attributes. Non-NPU devices keep the original CUDA path.
+    if dout.device.type == "npu":
+        _props = torch.npu.get_device_properties(dout.device)
+        sm_count = getattr(_props, "cube_core_num", None) or getattr(_props, "multi_processor_count", None) or 1
+    else:
+        sm_count = torch.cuda.get_device_properties(dout.device).multi_processor_count
     nheads_per_program = max(min(math.ceil(batch * nchunks * nheads / sm_count), nheads_ngroups_ratio), 1)
     nsplits = triton.cdiv(nheads_ngroups_ratio, nheads_per_program)
     dC = torch.empty(batch, seqlen, nsplits, ngroups, dstate, device=dout.device, dtype=torch.float32)
@@ -1533,9 +1537,13 @@ def _chunk_scan_bwd_dcb(x, dt, dA_cumsum, dout, seq_idx=None, CB=None, ngroups=1
         ddA_cumsum = None
         ddA_cumsum_strides = (0, 0, 0, 0, 0)
     nheads_ngroups_ratio = nheads // ngroups
-    # torch_npu exposes multi_processor_count as None; use the cube core count instead.
-    _props = torch.npu.get_device_properties(x.device)
-    sm_count = getattr(_props, "cube_core_num", None) or getattr(_props, "multi_processor_count", None) or 1
+    # torch_npu exposes multi_processor_count as None; fall back to the NPU
+    # core-count attributes. Non-NPU devices keep the original CUDA path.
+    if x.device.type == "npu":
+        _props = torch.npu.get_device_properties(x.device)
+        sm_count = getattr(_props, "cube_core_num", None) or getattr(_props, "multi_processor_count", None) or 1
+    else:
+        sm_count = torch.cuda.get_device_properties(x.device).multi_processor_count
     nheads_per_program = max(min(math.ceil(batch * nchunks * nheads / sm_count), nheads_ngroups_ratio), 1)
     nsplits = triton.cdiv(nheads_ngroups_ratio, nheads_per_program)
     dcb = torch.empty(batch, nchunks, nsplits, ngroups, chunk_size, chunk_size, device=x.device, dtype=torch.float32)

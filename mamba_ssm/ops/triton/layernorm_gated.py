@@ -306,9 +306,13 @@ def _layer_norm_bwd(dy, x, weight, bias, eps, mean, rstd, z=None, group_size=Non
         raise RuntimeError("This layer norm doesn't support feature dim >= 64KB.")
     # heuristics for number of warps
     num_warps = min(max(BLOCK_N // 256, 1), 8)
-    # torch_npu exposes multi_processor_count as None; use the vector core count instead.
-    _props = torch.npu.get_device_properties(x.device)
-    sm_count = getattr(_props, "vector_core_num", None) or getattr(_props, "multi_processor_count", None) or 1
+    # torch_npu exposes multi_processor_count as None; fall back to the NPU
+    # core-count attributes. Non-NPU devices keep the original CUDA path.
+    if x.device.type == "npu":
+        _props = torch.npu.get_device_properties(x.device)
+        sm_count = getattr(_props, "vector_core_num", None) or getattr(_props, "multi_processor_count", None) or 1
+    else:
+        sm_count = torch.cuda.get_device_properties(x.device).multi_processor_count
     # If group size is small (e.g., 64), we're only using 1 warp. So having just 108 programs
     # would limit the occupancy.
     nrow_groups = math.ceil(sm_count * math.ceil(4 / num_warps) / ngroups)

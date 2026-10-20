@@ -246,7 +246,7 @@ Therefore:
 |---|---|
 | SSD forward process-level intermittent wrong results (triton-ascend pipelining race in `_state_passing_fwd/_bwd`) | **Fixed**: `num_stages=1` pinned for the state-passing autotune configs **on NPU only** (detected via `torch_npu`; GPU/ROCm configs unchanged, kernel bodies untouched). 16/16 multi-process PASS; backward gradients bit-identical; re-verified after the NPU-only refinement (8/8 bit-identical). Compiler-side fix pending in triton-ascend. |
 | SSD backward kernel compile errors (`_state_passing_bwd`, `_chunk_scan_bwd_ddAcs_stable`) on triton-ascend 3.2.2 | **Not fixable in this repo** — fixed upstream in triton-ascend 3.6.0. Use the nightly wheel for training. |
-| `multi_processor_count` is `None` on torch_npu | **Fixed**: sm_count derived from `vector_core_num` / `cube_core_num`. |
+| `multi_processor_count` is `None` on torch_npu | **Fixed, and proven necessary**: reverting the 5 sm_count sites to the upstream `torch.cuda` line crashes every affected backward wrapper on NPU (`AssertionError: Torch not compiled with CUDA enabled`, verified 2026-10-20). The shipped code dispatches on `device.type`: NPU falls back to `vector_core_num` / `cube_core_num`; the non-NPU branch is the original upstream line unchanged. |
 | Default `Mamba2` path needs CUDA-only `causal_conv1d` | Use `use_mem_eff_path=False` (documented above). |
 | `PYTHONPATH=<path>` (overwrite) breaks CANN GE graph compilation (`No module named 'tbe'`) | Always **append**: `PYTHONPATH=/work/mamba2-npu:$PYTHONPATH`. |
 | `import tilelang` rewrites `PYTHONPATH` and breaks CANN graph-compile subprocesses | Avoid importing the mamba3 stack on NPU; this branch's lazy `mamba_ssm/__init__` keeps `import mamba_ssm.modules.mamba2` free of tilelang. |
